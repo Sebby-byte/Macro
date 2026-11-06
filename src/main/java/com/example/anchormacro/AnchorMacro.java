@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
 
 public class AnchorMacro implements ClientModInitializer {
 
-    private static final boolean DEBUG = true; // set to false to hide the chat messages
+    private static final boolean DEBUG = false; // set to false to hide the chat messages
 
     private enum Stage { IDLE, WAIT_ANCHOR, DETONATE }
 
