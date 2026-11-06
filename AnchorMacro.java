@@ -1,13 +1,17 @@
 package com.example.anchormacro;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
@@ -17,44 +21,69 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import org.lwjgl.glfw.GLFW;
 
-/**
- * Client-side only. After you place a respawn anchor:
- *   1) switches to glowstone and right-clicks the anchor (charge)
- *   2) next tick switches to a totem and right-clicks it again
- *
- * Requires glowstone AND a totem in your hotbar.
- */
 public class AnchorMacro implements ClientModInitializer {
+
+    private static final boolean DEBUG = true; // set to false to hide the chat messages
 
     private enum Stage { IDLE, WAIT_ANCHOR, DETONATE }
 
     private static Stage stage = Stage.IDLE;
     private static BlockPos anchorPos = null;
     private static int timeout = 0;
+    private static boolean enabled = false;
+
+    private static KeyMapping toggleKey;
+
+    private static void dbg(LocalPlayer p, String msg) {
+        if (DEBUG && p != null) p.displayClientMessage(Component.literal("[AnchorMacro] " + msg), false);
+    }
 
     @Override
     public void onInitializeClient() {
-        // Detect the moment you right-click with a respawn anchor in hand.
+        KeyMapping.Category category = KeyMapping.Category.register(
+                Identifier.fromNamespaceAndPath("anchormacro", "main"));
+
+        toggleKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.anchormacro.toggle",
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_R,
+                category));
+
         UseBlockCallback.EVENT.register((player, level, hand, hit) -> {
+            if (!enabled) return InteractionResult.PASS;
             if (!level.isClientSide()) return InteractionResult.PASS;
-            if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
-            if (stage != Stage.IDLE) return InteractionResult.PASS;
             if (!player.getItemInHand(hand).is(Items.RESPAWN_ANCHOR)) return InteractionResult.PASS;
-            // Anchors don't explode in the Nether, so don't bother there.
-            if (level.dimension() == Level.NETHER) return InteractionResult.PASS;
+
+            LocalPlayer lp = Minecraft.getInstance().player;
+            dbg(lp, "right-click with anchor, hand=" + hand + ", stage=" + stage);
+
+            if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
+            if (stage != Stage.IDLE) { dbg(lp, "busy, stage=" + stage); return InteractionResult.PASS; }
+            if (level.dimension() == Level.NETHER) { dbg(lp, "in Nether, skipping"); return InteractionResult.PASS; }
 
             BlockPlaceContext ctx = new BlockPlaceContext(player, hand, player.getItemInHand(hand), hit);
             anchorPos = ctx.getClickedPos();
             stage = Stage.WAIT_ANCHOR;
-            timeout = 10; // ticks to wait for the server to confirm the placement
-            return InteractionResult.PASS; // let vanilla placement continue
+            timeout = 20;
+            dbg(lp, "waiting for anchor at " + anchorPos.toShortString());
+            return InteractionResult.PASS;
         });
 
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
     }
 
     private void tick(Minecraft mc) {
+        while (toggleKey.consumeClick()) {
+            enabled = !enabled;
+            reset();
+            if (mc.player != null) {
+                mc.player.displayClientMessage(
+                        Component.literal("Anchor Macro: " + (enabled ? "ON" : "OFF")), true);
+            }
+        }
+
         if (stage == Stage.IDLE) return;
 
         LocalPlayer player = mc.player;
@@ -68,24 +97,28 @@ public class AnchorMacro implements ClientModInitializer {
                 if (mc.level.getBlockState(anchorPos).is(Blocks.RESPAWN_ANCHOR)) {
                     int glow = findInHotbar(player, Items.GLOWSTONE);
                     int totem = findInHotbar(player, Items.TOTEM_OF_UNDYING);
+                    dbg(player, "anchor found. glowstone slot=" + glow + ", totem slot=" + totem);
                     if (glow < 0 || totem < 0) {
-                        player.displayClientMessage(
-                                Component.literal("AnchorMacro: need glowstone and a totem in your hotbar"), true);
+                        dbg(player, "need glowstone and a totem in the hotbar");
                         reset();
                         return;
                     }
                     selectSlot(player, glow);
-                    interact(mc, player);
+                    InteractionResult r = interact(mc, player);
+                    dbg(player, "charge result: " + r);
                     stage = Stage.DETONATE;
                 } else if (--timeout <= 0) {
-                    reset(); // placement never happened
+                    dbg(player, "anchor never appeared at " + anchorPos.toShortString()
+                            + " (block there: " + mc.level.getBlockState(anchorPos).getBlock() + ")");
+                    reset();
                 }
             }
             case DETONATE -> {
                 int totem = findInHotbar(player, Items.TOTEM_OF_UNDYING);
                 if (totem >= 0) {
                     selectSlot(player, totem);
-                    interact(mc, player);
+                    InteractionResult r = interact(mc, player);
+                    dbg(player, "detonate result: " + r);
                 }
                 reset();
             }
@@ -93,12 +126,13 @@ public class AnchorMacro implements ClientModInitializer {
         }
     }
 
-    private static void interact(Minecraft mc, LocalPlayer player) {
+    private static InteractionResult interact(Minecraft mc, LocalPlayer player) {
         BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(anchorPos), Direction.UP, anchorPos, false);
         InteractionResult result = mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, hit);
         if (result.consumesAction()) {
             player.swing(InteractionHand.MAIN_HAND);
         }
+        return result;
     }
 
     private static int findInHotbar(LocalPlayer player, Item item) {
