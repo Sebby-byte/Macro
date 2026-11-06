@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "anchormacro",
+  "version": "${version}",
+  "name": "Anchor Macro",
+  "description": "Auto-charges and detonates a respawn anchor after you place it.",
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.example.anchormacro.AnchorMacro"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
