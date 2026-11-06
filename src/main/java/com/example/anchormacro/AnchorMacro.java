@@ -57,7 +57,7 @@ public class AnchorMacro implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        System.out.println("[AnchorMacro] 1.0.3 loaded, toggle key registered");
+        System.out.println("[AnchorMacro] 1.0.4 loaded, toggle key registered");
         loadConfig();
 
         KeyMapping.Category category = KeyMapping.Category.register(
@@ -108,7 +108,7 @@ public class AnchorMacro implements ClientModInitializer {
         }
 
         while (settingsKey.consumeClick()) {
-            if (mc.screen == null) mc.setScreen(new SettingsScreen());
+            if (mc.gui.screen() == null) mc.gui.setScreen(new SettingsScreen());
         }
 
         if (stage == Stage.IDLE) return;
