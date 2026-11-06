@@ -1,6 +1,5 @@
 package com.example.anchormacro;
 
-import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
@@ -21,7 +20,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
-import org.lwjgl.glfw.GLFW;
 
 public class AnchorMacro implements ClientModInitializer {
 
@@ -37,20 +35,19 @@ public class AnchorMacro implements ClientModInitializer {
     private static KeyMapping toggleKey;
 
     private static void dbg(LocalPlayer p, String msg) {
-        if (DEBUG && p != null) p.displayClientMessage(Component.literal("[AnchorMacro] " + msg), false);
+        if (DEBUG && p != null) p.sendSystemMessage(Component.literal("[AnchorMacro] " + msg));
     }
 
     @Override
     public void onInitializeClient() {
-        System.out.println("[AnchorMacro] 1.0.1 loaded, toggle key registered");
+        System.out.println("[AnchorMacro] 1.0.2 loaded, toggle key registered");
 
         KeyMapping.Category category = KeyMapping.Category.register(
                 Identifier.fromNamespaceAndPath("anchormacro", "main"));
 
         toggleKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.anchormacro.toggle",
-                InputConstants.Type.KEYSYM,
-                GLFW.GLFW_KEY_R,
+                82, // GLFW key code for R
                 category));
 
         UseBlockCallback.EVENT.register((player, level, hand, hit) -> {
@@ -81,8 +78,8 @@ public class AnchorMacro implements ClientModInitializer {
             enabled = !enabled;
             reset();
             if (mc.player != null) {
-                mc.player.displayClientMessage(
-                        Component.literal("Anchor Macro: " + (enabled ? "ON" : "OFF")), true);
+                mc.player.sendSystemMessage(
+                        Component.literal("Anchor Macro: " + (enabled ? "ON" : "OFF")));
             }
         }
 
@@ -131,9 +128,6 @@ public class AnchorMacro implements ClientModInitializer {
     private static InteractionResult interact(Minecraft mc, LocalPlayer player) {
         BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(anchorPos), Direction.UP, anchorPos, false);
         InteractionResult result = mc.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, hit);
-        if (result.consumesAction()) {
-            player.swing(InteractionHand.MAIN_HAND);
-        }
         return result;
     }
 
